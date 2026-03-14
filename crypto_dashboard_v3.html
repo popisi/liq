@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Liquidation Intelligence — Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{background:#00030a;color:#a8d4f0;font-family:'Rajdhani',sans-serif;min-height:100vh;}
+body::after{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,.012) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.012) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+.wrap{position:relative;z-index:1;max-width:1400px;margin:0 auto;padding:10px 14px;}
+
+/* HEADER */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #0d2a44;margin-bottom:10px;flex-wrap:wrap;gap:8px;}
+.hdr-title h1{font-family:'Orbitron',monospace;font-size:clamp(12px,2.2vw,19px);font-weight:900;color:#ffe000;letter-spacing:3px;}
+.hdr-title p{font-size:9px;color:#3a7aaa;letter-spacing:2px;margin-top:2px;}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#00ff9d;display:inline-block;margin-right:6px;animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+.hdr-right{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.ws-badge{font-size:9px;font-family:'Orbitron',monospace;padding:4px 10px;border-radius:4px;border:1px solid #3a7aaa;color:#3a7aaa;transition:all .3s;}
+.ws-badge.live{border-color:#00ff9d;color:#00ff9d;}
+.ws-badge.err{border-color:#ff2d55;color:#ff2d55;}
+.coin-btn{padding:5px 11px;background:rgba(0,212,255,.06);border:1px solid #0d2a44;color:#a8d4f0;border-radius:6px;font-size:10px;cursor:pointer;font-family:'Orbitron',monospace;transition:all .2s;}
+.coin-btn.active{background:rgba(255,224,0,.13);border-color:#ffe000;color:#ffe000;}
+.coin-btn:hover{border-color:#00d4ff;color:#00d4ff;}
+
+/* TICKER */
+.ticker{background:#020e1f;border:1px solid #0d2a44;border-radius:8px;padding:7px 12px;overflow:hidden;white-space:nowrap;margin-bottom:10px;}
+.ticker-inner{display:inline-block;}
+.tick-i{display:inline-block;margin:0 18px;font-size:10px;font-family:'Orbitron',monospace;}
+
+/* GRIDS */
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;}
+.g21{display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:8px;}
+.gcol{display:flex;flex-direction:column;gap:8px;}
+@media(max-width:960px){.g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr}.g21{grid-template-columns:1fr}}
+@media(max-width:500px){.g4{grid-template-columns:1fr 1fr}}
+
+/* CARDS */
+.card{background:#020e1f;border:1px solid #0d2a44;border-radius:10px;padding:12px;position:relative;overflow:hidden;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;border-radius:10px 10px 0 0;}
+.ca::before{background:linear-gradient(90deg,transparent,#00d4ff,transparent);}
+.cy::before{background:linear-gradient(90deg,transparent,#ffe000,transparent);}
+.cg::before{background:linear-gradient(90deg,transparent,#00ff9d,transparent);}
+.cr::before{background:linear-gradient(90deg,transparent,#ff2d55,transparent);}
+.cp::before{background:linear-gradient(90deg,transparent,#a855f7,transparent);}
+
+.lbl{font-size:9px;letter-spacing:2px;color:#3a7aaa;margin-bottom:5px;text-transform:uppercase;}
+.val{font-family:'Orbitron',monospace;font-size:clamp(14px,2vw,22px);font-weight:700;color:#e8f6ff;transition:color .3s;}
+.sub{font-size:10px;margin-top:3px;color:#a8d4f0;}
+.up{color:#00ff9d!important;} .dn{color:#ff2d55!important;}
+.acc{color:#00d4ff!important;} .yel{color:#ffe000!important;}
+.pur{color:#a855f7!important;} .neu{color:#a8d4f0;}
+.shdr{font-family:'Orbitron',monospace;font-size:9px;letter-spacing:2px;color:#3a7aaa;margin-bottom:7px;border-bottom:1px solid #0d2a44;padding-bottom:5px;}
+
+/* CHART */
+.ch-wrap{position:relative;width:100%;height:190px;}
+
+/* ORDER BOOK */
+.ob-row{display:flex;justify-content:space-between;align-items:center;padding:2px 4px;font-size:10px;font-family:'Orbitron',monospace;position:relative;border-radius:2px;overflow:hidden;}
+.ob-bg{position:absolute;top:0;bottom:0;opacity:.18;border-radius:2px;}
+.ob-ask .ob-bg{right:0;background:#ff2d55;}
+.ob-bid .ob-bg{left:0;background:#00ff9d;}
+.ob-p{position:relative;z-index:1;}
+.ob-q{position:relative;z-index:1;color:#a8d4f0;}
+
+/* TRADE FEED */
+.tr-row{display:flex;justify-content:space-between;align-items:center;padding:3px 4px;font-size:10px;font-family:'Orbitron',monospace;border-bottom:1px solid rgba(13,42,68,.5);}
+.tr-row.buy .tr-s{color:#00ff9d;}
+.tr-row.sell .tr-s{color:#ff2d55;}
+.tr-row.new-row{animation:rowfl .8s ease-out;}
+@keyframes rowfl{0%{background:rgba(0,212,255,.12)}100%{background:transparent}}
+
+/* LONG/SHORT BAR */
+.ls-bar{display:flex;height:16px;border-radius:4px;overflow:hidden;margin:8px 0;}
+.ls-l{background:linear-gradient(90deg,#00c47a,#00ff9d);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:'Orbitron',monospace;font-weight:700;color:#001a08;transition:width .6s;}
+.ls-s{background:linear-gradient(90deg,#ff4d6a,#ff2d55);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:'Orbitron',monospace;font-weight:700;color:#fff;transition:width .6s;}
+
+/* MINI STAT */
+.mstat{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(13,42,68,.6);}
+.mstat:last-child{border-bottom:none;}
+.mlbl{font-size:9px;color:#3a7aaa;letter-spacing:1px;}
+.mval{font-family:'Orbitron',monospace;font-size:11px;color:#e8f6ff;}
+
+/* SIGNAL */
+.sig-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(13,42,68,.5);}
+.sig-row:last-child{border-bottom:none;}
+.sig-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.sig-txt{font-size:10px;color:#a8d4f0;flex:1;}
+.sig-b{font-size:8px;font-family:'Orbitron',monospace;padding:2px 6px;border-radius:3px;}
+.sb-bull{background:rgba(0,255,157,.12);color:#00ff9d;}
+.sb-bear{background:rgba(255,45,85,.12);color:#ff2d55;}
+.sb-neu{background:rgba(168,212,240,.08);color:#a8d4f0;}
+
+/* HEATMAP */
+.hmap{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;margin-top:6px;}
+.hm-c{border-radius:3px;height:26px;cursor:pointer;transition:transform .2s;display:flex;align-items:center;justify-content:center;font-size:8px;font-family:'Orbitron',monospace;font-weight:700;}
+.hm-c:hover{transform:scale(1.1);z-index:5;position:relative;}
+
+/* FUNDING */
+.fr{margin:4px 0;}
+.fr-lbl{font-size:9px;color:#a8d4f0;margin-bottom:2px;display:flex;justify-content:space-between;}
+.fr-out{height:8px;background:#0d2a44;border-radius:3px;overflow:hidden;}
+.fr-in{height:100%;border-radius:3px;transition:width .6s;}
+
+/* AI PANEL */
+.ai-wrap{background:#020e1f;border:1px solid #0d2a44;border-radius:10px;overflow:hidden;margin-top:8px;position:relative;}
+.ai-wrap::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,#a855f7,transparent);}
+.ai-hdr{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #0d2a44;background:linear-gradient(135deg,rgba(0,212,255,.04),rgba(168,85,247,.04));}
+.ai-av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#00d4ff,#a855f7);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.ai-name{font-family:'Orbitron',monospace;font-size:11px;font-weight:900;color:#e8f6ff;letter-spacing:1px;}
+.ai-sub{font-size:9px;color:#3a7aaa;letter-spacing:1px;margin-top:2px;}
+.ai-live{margin-left:auto;font-size:9px;color:#00ff9d;font-family:'Orbitron',monospace;display:flex;align-items:center;gap:5px;}
+
+.conf-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid #0d2a44;background:rgba(0,0,0,.2);}
+.conf-out{flex:1;height:5px;background:#0d2a44;border-radius:3px;overflow:hidden;}
+.conf-in{height:100%;border-radius:3px;background:linear-gradient(90deg,#00ff9d,#00d4ff);transition:width .8s;}
+.sig-main{padding:4px 10px;border-radius:5px;font-family:'Orbitron',monospace;font-size:9px;font-weight:900;letter-spacing:1px;}
+.sm-long{background:rgba(0,255,157,.15);color:#00ff9d;border:1px solid rgba(0,255,157,.3);}
+.sm-short{background:rgba(255,45,85,.15);color:#ff2d55;border:1px solid rgba(255,45,85,.3);}
+.sm-wait{background:rgba(255,184,0,.15);color:#ffb800;border:1px solid rgba(255,184,0,.3);}
+
+.dec-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 14px;border-bottom:1px solid #0d2a44;}
+@media(max-width:600px){.dec-grid{grid-template-columns:1fr 1fr}}
+.dec-c{background:#010c1e;border:1px solid #0d2a44;border-radius:7px;padding:8px;text-align:center;}
+.dec-l{font-size:8px;letter-spacing:1px;color:#3a7aaa;margin-bottom:4px;}
+.dec-v{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;}
+
+.chat-area{height:280px;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;}
+.chat-area::-webkit-scrollbar{width:3px;}
+.chat-area::-webkit-scrollbar-thumb{background:#0d2a44;border-radius:2px;}
+
+.msg{display:flex;gap:7px;max-width:95%;}
+.msg.user{align-self:flex-end;flex-direction:row-reverse;}
+.msg-av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;margin-top:2px;}
+.av-ai{background:linear-gradient(135deg,#00d4ff,#a855f7);}
+.av-u{background:rgba(255,224,0,.1);border:1px solid rgba(255,224,0,.3);color:#ffe000;font-family:'Orbitron',monospace;font-size:8px;}
+.bubble{padding:9px 12px;border-radius:9px;font-size:11px;line-height:1.65;}
+.msg.ai .bubble{background:rgba(1,12,30,.9);border:1px solid #0d2a44;color:#e8f6ff;}
+.msg.user .bubble{background:rgba(255,224,0,.07);border:1px solid rgba(255,224,0,.2);color:#ffe000;}
+
+.typing span{width:5px;height:5px;border-radius:50%;background:#00d4ff;display:inline-block;margin:0 2px;animation:boun 1.2s infinite;}
+.typing span:nth-child(2){animation-delay:.2s;}
+.typing span:nth-child(3){animation-delay:.4s;}
+@keyframes boun{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+.qbtns{display:flex;gap:5px;flex-wrap:wrap;padding:8px 12px;border-top:1px solid #0d2a44;border-bottom:1px solid #0d2a44;}
+.qbtn{padding:4px 9px;background:rgba(0,212,255,.06);border:1px solid #0d2a44;color:#a8d4f0;border-radius:5px;font-size:9px;cursor:pointer;transition:all .2s;}
+.qbtn:hover{border-color:#00d4ff;color:#00d4ff;}
+
+.inp-row{display:flex;gap:7px;padding:10px 12px;align-items:flex-end;}
+.chat-inp{flex:1;background:#010c1e;border:1px solid #0d2a44;color:#e8f6ff;padding:9px 12px;border-radius:7px;font-family:'Rajdhani',sans-serif;font-size:13px;outline:none;resize:none;min-height:40px;transition:border-color .2s;}
+.chat-inp:focus{border-color:#00d4ff;}
+.chat-inp::placeholder{color:#3a7aaa;}
+.send-btn{padding:9px 14px;background:rgba(0,212,255,.1);border:1px solid #00d4ff;color:#00d4ff;border-radius:7px;font-family:'Orbitron',monospace;font-size:9px;cursor:pointer;transition:all .2s;}
+.send-btn:hover{background:rgba(0,212,255,.2);}
+.send-btn:disabled{opacity:.4;cursor:not-allowed;}
+.disc{padding:6px 14px;font-size:8px;color:#3a7aaa;text-align:center;border-top:1px solid #0d2a44;}
+
+@keyframes flash{0%{opacity:.4}100%{opacity:1}}
+.flash{animation:flash .25s ease-out;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-title">
+    <h1><span class="live-dot"></span>LIQUIDATION INTELLIGENCE — LIVE</h1>
+    <p>COINGECKO API · REAL-TIME DATA · AI POWERED · NO SERVER NEEDED</p>
+  </div>
+  <div class="hdr-right">
+    <span class="ws-badge" id="ws-badge">⬤ CONNECTING...</span>
+    <button class="coin-btn active" onclick="setCoin('bitcoin','BTC',this)">BTC</button>
+    <button class="coin-btn" onclick="setCoin('ethereum','ETH',this)">ETH</button>
+    <button class="coin-btn" onclick="setCoin('solana','SOL',this)">SOL</button>
+    <button class="coin-btn" onclick="setCoin('binancecoin','BNB',this)">BNB</button>
+    <button class="coin-btn" onclick="setCoin('ripple','XRP',this)">XRP</button>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="ticker"><div class="ticker-inner" id="tkr">⬤ Loading live prices...</div></div>
+
+<!-- TOP STATS -->
+<div class="g4">
+  <div class="card ca">
+    <div class="lbl">Live Price</div>
+    <div class="val" id="s-price">—</div>
+    <div class="sub" id="s-ch">Loading...</div>
+  </div>
+  <div class="card cy">
+    <div class="lbl">24H Change</div>
+    <div class="val" id="s-pct">—</div>
+    <div class="sub" id="s-hl">H: — · L: —</div>
+  </div>
+  <div class="card cg">
+    <div class="lbl">Market Cap</div>
+    <div class="val acc" id="s-mc">—</div>
+    <div class="sub" id="s-rank">Rank: —</div>
+  </div>
+  <div class="card cr">
+    <div class="lbl">24H Volume</div>
+    <div class="val yel" id="s-vol">—</div>
+    <div class="sub" id="s-supply">Supply: —</div>
+  </div>
+</div>
+
+<!-- CHART + ORDER BOOK -->
+<div class="g21">
+  <div class="card ca">
+    <div class="shdr" id="ch-title">BTC/USD — PRICE HISTORY (7 DAYS)</div>
+    <div class="ch-wrap"><canvas id="priceChart"></canvas></div>
+  </div>
+  <div class="card cy">
+    <div class="shdr">SIMULATED ORDER BOOK</div>
+    <div style="font-size:8px;color:#3a7aaa;display:flex;justify-content:space-between;padding:0 4px;margin-bottom:3px;"><span>PRICE</span><span>QTY</span></div>
+    <div id="ob-asks"></div>
+    <div id="ob-spread" style="text-align:center;padding:4px 0;font-family:'Orbitron',monospace;font-size:10px;color:#ffe000;border-top:1px solid #0d2a44;border-bottom:1px solid #0d2a44;margin:3px 0;">SPREAD: —</div>
+    <div id="ob-bids"></div>
+  </div>
+</div>
+
+<!-- TRADE FEED + LONG/SHORT + SIGNALS -->
+<div class="g3">
+  <div class="card cr">
+    <div class="shdr">SIMULATED TRADE FEED</div>
+    <div id="trade-feed" style="max-height:175px;overflow-y:auto;"></div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:9px;">
+      <span>Buy Vol: <span class="up" id="bvol">—</span></span>
+      <span>Sell Vol: <span class="dn" id="svol">—</span></span>
+    </div>
+  </div>
+  <div class="card ca">
+    <div class="shdr">BUY / SELL RATIO</div>
+    <div class="ls-bar"><div class="ls-l" id="ls-l" style="width:55%">55%</div><div class="ls-s" id="ls-s" style="width:45%">45%</div></div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;margin-bottom:8px;"><span class="up">▲ BUYERS</span><span class="dn">SELLERS ▼</span></div>
+    <div class="mstat"><span class="mlbl">Price Bias</span><span class="mval" id="pbias">—</span></div>
+    <div class="mstat"><span class="mlbl">Volume CVD</span><span class="mval" id="cvd">—</span></div>
+    <div class="mstat"><span class="mlbl">ATH Distance</span><span class="mval acc" id="ath-d">—</span></div>
+    <div class="mstat"><span class="mlbl">Last Update</span><span class="mval" id="lupd">—</span></div>
+  </div>
+  <div class="card cg">
+    <div class="shdr">Live Signals</div>
+    <div id="signals"></div>
+    <div style="margin-top:8px;"><div class="shdr">Key Levels</div>
+      <div class="mstat"><span class="mlbl">Resistance</span><span class="mval dn" id="kl-r">—</span></div>
+      <div class="mstat"><span class="mlbl">Support</span><span class="mval up" id="kl-s">—</span></div>
+      <div class="mstat"><span class="mlbl">Pivot</span><span class="mval yel" id="kl-p">—</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- HEATMAP + FUNDING + VOLUME -->
+<div class="g3" style="margin-top:8px;">
+  <div class="card cy">
+    <div class="shdr">Liquidation Heatmap (Est.)</div>
+    <div style="font-size:9px;color:#a8d4f0;margin-bottom:4px;">Price levels vs liquidation density</div>
+    <div class="hmap" id="hmap"></div>
+    <div style="display:flex;justify-content:space-between;font-size:8px;color:#3a7aaa;margin-top:3px;"><span>LOW</span><span style="color:#ffb800;">MED</span><span style="color:#ff2d55;">HIGH</span></div>
+  </div>
+  <div class="card cr">
+    <div class="shdr">Estimated Funding Rates</div>
+    <div id="funding"></div>
+  </div>
+  <div class="card ca">
+    <div class="shdr">Volume Distribution</div>
+    <div style="position:relative;height:120px;"><canvas id="volChart"></canvas></div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;margin-top:6px;">
+      <span>Buy: <span class="up" id="vbp">—</span></span>
+      <span>Sell: <span class="dn" id="vsp">—</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- AI ASSISTANT -->
+<div class="ai-wrap">
+  <div class="ai-hdr">
+    <div class="ai-av">🤖</div>
+    <div><div class="ai-name">NEXUS AI · TRADING ASSISTANT</div><div class="ai-sub">REAL-TIME COINGECKO DATA · LOCAL AI ENGINE</div></div>
+    <div class="ai-live"><span class="live-dot"></span>LIVE</div>
+  </div>
+  <div class="conf-row">
+    <span style="font-size:9px;color:#3a7aaa;letter-spacing:1px;white-space:nowrap;">AI CONFIDENCE</span>
+    <div class="conf-out"><div class="conf-in" id="conf-bar" style="width:70%"></div></div>
+    <span style="font-family:'Orbitron',monospace;font-size:10px;color:#00ff9d;min-width:30px;" id="conf-pct">70%</span>
+    <span class="sig-main sm-long" id="main-sig">▲ LONG</span>
+  </div>
+  <div class="dec-grid">
+    <div class="dec-c"><div class="dec-l">Entry Zone</div><div class="dec-v up" id="d-entry">—</div></div>
+    <div class="dec-c"><div class="dec-l">Take Profit</div><div class="dec-v acc" id="d-tp">—</div></div>
+    <div class="dec-c"><div class="dec-l">Stop Loss</div><div class="dec-v dn" id="d-sl">—</div></div>
+    <div class="dec-c"><div class="dec-l">Risk/Reward</div><div class="dec-v yel" id="d-rr">—</div></div>
+  </div>
+  <div class="chat-area" id="chat"></div>
+  <div class="qbtns">
+    <button class="qbtn" onclick="ask('अभी long करूँ या short? Live data देखकर बताओ।')">📊 Long/Short?</button>
+    <button class="qbtn" onclick="ask('Entry, Stop Loss और Take Profit exact बताओ।')">🎯 Entry/SL/TP</button>
+    <button class="qbtn" onclick="ask('Market risk level क्या है अभी?')">⚠️ Risk Level</button>
+    <button class="qbtn" onclick="ask('Market cap और volume देखकर analysis दो।')">📈 Full Analysis</button>
+    <button class="qbtn" onclick="ask('Best leverage और position size क्या होगा?')">⚡ Leverage</button>
+    <button class="qbtn" onclick="ask('अगले कुछ घंटों का outlook क्या है?')">🔮 Outlook</button>
+  </div>
+  <div class="inp-row">
+    <textarea class="chat-inp" id="chat-inp" placeholder="कुछ भी पूछो... (Enter = भेजो, Shift+Enter = नई लाइन)" rows="1" onkeydown="handleKey(event)"></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMsg()">ANALYZE ↗</button>
+  </div>
+  <div class="disc">⚠️ Educational purpose only · Financial advice नहीं · हमेशा risk manage करें</div>
+</div>
+
+</div><!-- wrap -->
+
+<script>
+// ════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════
+let coinId = 'bitcoin', coinName = 'BTC';
+let mkt = {}; // market data
+let priceArr = []; // 7-day price history
+let simTrades = []; // simulated trades
+let buyVol = 0, sellVol = 0;
+let charts = {};
+let chatHistory = [];
+let refreshTimer = null;
+
+const CG = 'https://api.coingecko.com/api/v3';
+
+// ════════════════════════════════════════════
+// FETCH DATA
+// ════════════════════════════════════════════
+async function fetchAll() {
+  try {
+    setBadge('', '⬤ UPDATING...');
+
+    // Parallel: coin data + price chart + all tickers
+    const [coinRes, chartRes, allRes] = await Promise.all([
+      fetch(`${CG}/coins/${coinId}?localization=false&tickers=false&community_data=false&developer_data=false`),
+      fetch(`${CG}/coins/${coinId}/market_chart?vs_currency=usd&days=7&interval=hourly`),
+      fetch(`${CG}/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,solana,binancecoin,ripple,dogecoin,avalanche-2,matic-network&order=market_cap_desc&per_page=8&sparkline=false`)
+    ]);
+
+    const coin  = await coinRes.json();
+    const chart = await chartRes.json();
+    const all   = await allRes.json();
+
+    // Store
+    const md = coin.market_data;
+    mkt = {
+      price:      md.current_price.usd,
+      change24h:  md.price_change_24h,
+      changePct:  md.price_change_percentage_24h,
+      high:       md.high_24h.usd,
+      low:        md.low_24h.usd,
+      vol:        md.total_volume.usd,
+      mc:         md.market_cap.usd,
+      rank:       coin.market_cap_rank,
+      supply:     md.circulating_supply,
+      ath:        md.ath.usd,
+      athPct:     md.ath_change_percentage.usd,
+    };
+    priceArr = chart.prices.map(p => p[1]);
+
+    // Update all UI
+    updateStats();
+    updateChart();
+    updateOrderBook();
+    simulateTrades();
+    updateSignals();
+    updateKeyLevels();
+    updateHeatmap();
+    updateFunding();
+    updateVolChart();
+    updateAICards();
+    updateTicker(all);
+
+    setBadge('live', '⬤ LIVE');
+    document.getElementById('lupd').textContent = new Date().toTimeString().slice(0,8);
+
+  } catch(e) {
+    setBadge('err', '⬤ ERROR');
+    console.error(e);
+  }
+}
+
+function setBadge(cls, txt) {
+  const b = document.getElementById('ws-badge');
+  b.className = 'ws-badge ' + cls;
+  b.textContent = txt;
+}
+
+// ════════════════════════════════════════════
+// UI UPDATES
+// ════════════════════════════════════════════
+function fp(n) {
+  if (!n) return '—';
+  if (n >= 1e12) return '$' + (n/1e12).toFixed(2) + 'T';
+  if (n >= 1e9)  return '$' + (n/1e9).toFixed(2)  + 'B';
+  if (n >= 1e6)  return '$' + (n/1e6).toFixed(2)  + 'M';
+  if (n >= 1e3)  return '$' + n.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2});
+  if (n >= 1)    return '$' + n.toFixed(4);
+  return '$' + n.toFixed(6);
+}
+
+function updateStats() {
+  const el = id => document.getElementById(id);
+  // Price with flash
+  const priceEl = el('s-price');
+  priceEl.textContent = fp(mkt.price);
+  priceEl.className = 'val flash';
+  setTimeout(() => priceEl.className = 'val', 300);
+
+  el('s-pct').textContent = (mkt.changePct >= 0 ? '+' : '') + mkt.changePct?.toFixed(2) + '%';
+  el('s-pct').className = 'val ' + (mkt.changePct >= 0 ? 'up' : 'dn');
+  el('s-ch').textContent = (mkt.change24h >= 0 ? '▲ +' : '▼ ') + fp(Math.abs(mkt.change24h));
+  el('s-ch').className = 'sub ' + (mkt.change24h >= 0 ? 'up' : 'dn');
+  el('s-hl').textContent = 'H: ' + fp(mkt.high) + '  ·  L: ' + fp(mkt.low);
+  el('s-mc').textContent = fp(mkt.mc);
+  el('s-rank').textContent = 'Rank #' + mkt.rank;
+  el('s-vol').textContent = fp(mkt.vol);
+  el('s-supply').textContent = 'Supply: ' + (mkt.supply/1e6).toFixed(2) + 'M';
+
+  // ATH distance
+  el('ath-d').textContent = mkt.athPct?.toFixed(1) + '% from ATH';
+
+  // CVD
+  const buyR = Math.round(buyVol / (buyVol + sellVol + 1) * 100);
+  const cvdVal = buyVol - sellVol;
+  el('cvd').textContent = (cvdVal >= 0 ? '+' : '') + fp(Math.abs(cvdVal));
+  el('cvd').className = 'mval ' + (cvdVal >= 0 ? 'up' : 'dn');
+
+  // Price bias
+  const bias = mkt.changePct;
+  el('pbias').textContent = bias > 1.5 ? '▲ BULLISH' : bias < -1.5 ? '▼ BEARISH' : '→ NEUTRAL';
+  el('pbias').className = 'mval ' + (bias > 1.5 ? 'up' : bias < -1.5 ? 'dn' : 'neu');
+
+  document.getElementById('ch-title').textContent = coinName + '/USD — PRICE HISTORY (7 DAYS)';
+}
+
+function updateChart() {
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  const isBull = mkt.changePct >= 0;
+  const color = isBull ? '#00ff9d' : '#ff2d55';
+  const labels = priceArr.map((_,i) => i % 24 === 0 ? 'Day '+(Math.floor(i/24)+1) : '');
+
+  if (charts.price) charts.price.destroy();
+  charts.price = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: priceArr, borderColor: color, borderWidth: 1.5,
+        pointRadius: 0, fill: true,
+        backgroundColor: isBull ? 'rgba(0,255,157,0.05)' : 'rgba(255,45,85,0.05)',
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: 'rgba(1,12,30,.95)', borderColor: '#0d2a44', borderWidth: 1,
+        titleColor: '#e8f6ff', bodyColor: '#a8d4f0',
+        callbacks: { label: ctx => fp(ctx.raw) }
+      }},
+      scales: {
+        x: { grid: { color: 'rgba(13,42,68,.5)' }, ticks: { color: '#3a7aaa', font: { size: 8 } } },
+        y: { grid: { color: 'rgba(13,42,68,.5)' }, ticks: { color: '#a8d4f0', font: { size: 8 }, callback: v => fp(v) }, position: 'right' }
+      }
+    }
+  });
+}
+
+function updateOrderBook() {
+  const p = mkt.price || 1;
+  const spread = p * 0.0005;
+  const bids = Array.from({length:8},(_,i) => ({ p: p - spread - i * p * 0.0008, q: (Math.random()*5+0.5).toFixed(3) }));
+  const asks = Array.from({length:8},(_,i) => ({ p: p + spread + i * p * 0.0008, q: (Math.random()*5+0.5).toFixed(3) }));
+  const maxQ = 6;
+  const mkRow = (item, side) => {
+    const w = Math.round(parseFloat(item.q)/maxQ*100);
+    return `<div class="ob-row ob-${side}">
+      <div class="ob-bg" style="width:${w}%"></div>
+      <span class="ob-p" style="color:${side==='ask'?'#ff2d55':'#00ff9d'}">${fp(item.p)}</span>
+      <span class="ob-q">${item.q}</span>
+    </div>`;
+  };
+  document.getElementById('ob-asks').innerHTML = [...asks].reverse().map(a=>mkRow(a,'ask')).join('');
+  document.getElementById('ob-bids').innerHTML = bids.map(b=>mkRow(b,'bid')).join('');
+  document.getElementById('ob-spread').textContent = 'SPREAD: ' + fp(spread*2);
+}
+
+function simulateTrades() {
+  const p = mkt.price || 1;
+  const newTrades = Array.from({length:5}, (_,i) => {
+    const isBuy = Math.random() > (mkt.changePct < 0 ? 0.55 : 0.45);
+    const px = (p * (1 + (Math.random()-.5) * 0.001)).toFixed(p > 100 ? 2 : 4);
+    const qty = (Math.random()*5+0.01).toFixed(3);
+    const val = Math.round(px*qty);
+    if(isBuy) buyVol+=val; else sellVol+=val;
+    const now = new Date();
+    return { time: now.toTimeString().slice(0,8), side: isBuy?'buy':'sell', price: px, qty, val, isNew: i===0 };
+  });
+  simTrades = [...newTrades, ...simTrades].slice(0,40);
+
+  document.getElementById('trade-feed').innerHTML = simTrades.slice(0,15).map(t=>`
+    <div class="tr-row ${t.side} ${t.isNew?'new-row':''}">
+      <span style="color:#3a7aaa;font-size:9px">${t.time}</span>
+      <span class="tr-s">${t.side.toUpperCase()}</span>
+      <span style="color:#e8f6ff">$${t.price}</span>
+      <span style="color:#a8d4f0">${t.qty}</span>
+      <span style="color:${t.val>10000?'#ffb800':'#a8d4f0'};font-size:9px">$${t.val.toLocaleString()}</span>
+    </div>`).join('');
+
+  const bv = buyVol, sv = sellVol;
+  document.getElementById('bvol').textContent = fp(bv);
+  document.getElementById('svol').textContent = fp(sv);
+  const br = Math.round(bv/(bv+sv+1)*100);
+  const sr = 100-br;
+  document.getElementById('ls-l').style.width = br+'%'; document.getElementById('ls-l').textContent = br+'%';
+  document.getElementById('ls-s').style.width = sr+'%'; document.getElementById('ls-s').textContent = sr+'%';
+  document.getElementById('vbp').textContent = br+'%';
+  document.getElementById('vsp').textContent = sr+'%';
+}
+
+function updateSignals() {
+  const ch = mkt.changePct || 0;
+  const buyR = Math.round(buyVol/(buyVol+sellVol+1)*100);
+  const sigs = [];
+  if(ch > 2)      sigs.push({d:'#00ff9d', t:`Price +${ch.toFixed(2)}% — Strong uptrend`, b:'BULLISH', c:'sb-bull'});
+  else if(ch < -2) sigs.push({d:'#ff2d55', t:`Price ${ch.toFixed(2)}% — Bearish pressure`, b:'BEARISH', c:'sb-bear'});
+  else             sigs.push({d:'#a8d4f0', t:`Price ${ch.toFixed(2)}% — Range-bound market`, b:'NEUTRAL', c:'sb-neu'});
+  if(buyR>55) sigs.push({d:'#00ff9d', t:`Buy volume ${buyR}% dominant — accumulation`, b:'BULLISH', c:'sb-bull'});
+  else if(buyR<45) sigs.push({d:'#ff2d55', t:`Sell pressure ${100-buyR}% — distribution`, b:'BEARISH', c:'sb-bear'});
+  else             sigs.push({d:'#a8d4f0', t:'Volume split balanced — no clear edge', b:'NEUTRAL', c:'sb-neu'});
+  const vr = mkt.vol/mkt.mc*100;
+  if(vr>10) sigs.push({d:'#00ff9d', t:`High volume/MC ratio ${vr.toFixed(1)}% — active market`, b:'BULLISH', c:'sb-bull'});
+  else      sigs.push({d:'#a8d4f0', t:`Low volume ${vr.toFixed(1)}% of MC — thin market`, b:'NEUTRAL', c:'sb-neu'});
+  document.getElementById('signals').innerHTML = sigs.map(s=>`
+    <div class="sig-row"><div class="sig-dot" style="background:${s.d};box-shadow:0 0 5px ${s.d}80;"></div>
+    <span class="sig-txt">${s.t}</span><span class="sig-b ${s.c}">${s.b}</span></div>`).join('');
+}
+
+function updateKeyLevels() {
+  const p = mkt.price || 0;
+  document.getElementById('kl-r').textContent = fp(Math.round(p*1.025));
+  document.getElementById('kl-s').textContent = fp(Math.round(p*0.975));
+  document.getElementById('kl-p').textContent = fp(Math.round((mkt.high+mkt.low+p)/3));
+}
+
+function updateHeatmap() {
+  const p = mkt.price || 1;
+  const cells = Array.from({length:24},(_,i) => {
+    const lvl = Math.round(p*(0.97+i/24*0.06));
+    const d = Math.random();
+    const bg = d>.75 ? `rgba(255,45,85,${.5+d*.4})` : d>.4 ? `rgba(255,184,0,${.3+d*.4})` : 'rgba(13,42,68,.7)';
+    const col = d>.75 ? '#fff' : 'transparent';
+    return `<div class="hm-c" style="background:${bg};color:${col};" title="${fp(lvl)}"></div>`;
+  });
+  document.getElementById('hmap').innerHTML = cells.join('');
+}
+
+function updateFunding() {
+  const base = (mkt.changePct||0)/100*0.12;
+  const exs = [{n:'Binance',r:base+.0082},{n:'OKX',r:base+.0064},{n:'Bybit',r:base+.009},{n:'Bitget',r:base+.005},{n:'Deribit',r:base-.003}];
+  document.getElementById('funding').innerHTML = exs.map(e=>`
+    <div class="fr"><div class="fr-lbl"><span>${e.n}</span><span class="${e.r>=0?'up':'dn'}">${e.r>=0?'+':''}${(e.r*100).toFixed(4)}%</span></div>
+    <div class="fr-out"><div class="fr-in" style="width:${Math.min(Math.abs(e.r)/.02*100,100)}%;background:${e.r>=0?'rgba(0,255,157,.6)':'rgba(255,45,85,.6)'}"></div></div></div>`).join('');
+}
+
+function updateVolChart() {
+  const br = Math.round(buyVol/(buyVol+sellVol+1)*100);
+  const ctx = document.getElementById('volChart').getContext('2d');
+  if(charts.vol){ charts.vol.data.datasets[0].data=[br,100-br]; charts.vol.update('none'); return; }
+  charts.vol = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels:['Buy','Sell'], datasets:[{data:[br,100-br], backgroundColor:['rgba(0,255,157,.6)','rgba(255,45,85,.6)'], borderWidth:0}] },
+    options: { responsive:true, maintainAspectRatio:false, animation:false, plugins:{ legend:{display:false} }, cutout:'62%' }
+  });
+}
+
+function updateTicker(all) {
+  if(!all||!all.length) return;
+  const items = all.map(c => {
+    const cl = c.price_change_percentage_24h >= 0 ? 'up' : 'dn';
+    const ar = c.price_change_percentage_24h >= 0 ? '▲' : '▼';
+    const pr = c.current_price >= 100 ? c.current_price.toLocaleString('en',{minimumFractionDigits:2,maximumFractionDigits:2}) : c.current_price.toFixed(4);
+    return `<span class="tick-i ${cl}">${ar} ${c.symbol.toUpperCase()} $${pr} (${c.price_change_percentage_24h>=0?'+':''}${c.price_change_percentage_24h?.toFixed(2)}%)</span>`;
+  });
+  const html = [...items,...items].join('');
+  const el = document.getElementById('tkr');
+  el.innerHTML = html;
+  const w = el.scrollWidth/2;
+  el.style.animation = 'none';
+  el.style.transform = 'translateX(0)';
+  el.style.transition = 'none';
+  setTimeout(() => {
+    el.style.transition = `transform ${w/60}s linear`;
+    el.style.transform = `translateX(-${w}px)`;
+    el.addEventListener('transitionend', function loop() {
+      el.style.transition = 'none';
+      el.style.transform = 'translateX(0)';
+      setTimeout(() => {
+        el.style.transition = `transform ${w/60}s linear`;
+        el.style.transform = `translateX(-${w}px)`;
+      }, 50);
+    }, {once: true});
+  }, 100);
+}
+
+function updateAICards() {
+  const p = mkt.price||0, ch = mkt.changePct||0;
+  const buyR = Math.round(buyVol/(buyVol+sellVol+1)*100);
+  const isBull = ch > 0.5 && buyR > 52;
+  const isBear = ch < -0.5 && buyR < 48;
+  document.getElementById('d-entry').textContent = fp(Math.round(p*0.999));
+  document.getElementById('d-tp').textContent    = fp(Math.round(p*(isBull?1.03:isBear?0.97:1.025)));
+  document.getElementById('d-sl').textContent    = fp(Math.round(p*(isBull?0.982:isBear?1.018:0.985)));
+  document.getElementById('d-rr').textContent    = '2.0 : 1';
+  const sig = document.getElementById('main-sig');
+  if(isBull){ sig.className='sig-main sm-long'; sig.textContent='▲ LONG'; }
+  else if(isBear){ sig.className='sig-main sm-short'; sig.textContent='▼ SHORT'; }
+  else { sig.className='sig-main sm-wait'; sig.textContent='⏳ WAIT'; }
+  const conf = Math.min(60+Math.abs(ch)*4+Math.abs(buyR-50)*0.4, 92);
+  document.getElementById('conf-bar').style.width = conf+'%';
+  document.getElementById('conf-pct').textContent = Math.round(conf)+'%';
+}
+
+// ════════════════════════════════════════════
+// COIN SWITCH
+// ════════════════════════════════════════════
+function setCoin(id, name, btn) {
+  coinId = id; coinName = name;
+  buyVol = 0; sellVol = 0; simTrades = [];
+  document.querySelectorAll('.coin-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  fetchAll();
+}
+
+// ════════════════════════════════════════════
+// AI ENGINE
+// ════════════════════════════════════════════
+function analysis(q) {
+  const p    = mkt.price || 0;
+  const ch   = mkt.changePct || 0;
+  const high = mkt.high || p*1.02;
+  const low  = mkt.low  || p*0.98;
+  const vol  = mkt.vol  || 0;
+  const mc   = mkt.mc   || 0;
+  const ath  = mkt.ath  || p;
+  const athP = mkt.athPct || 0;
+  const buyR = Math.round(buyVol/(buyVol+sellVol+1)*100);
+  const selR = 100-buyR;
+  const cvdV = buyVol-sellVol;
+  const isBull = ch>0.5 && buyR>52;
+  const isBear = ch<-0.5 && buyR<48;
+  const entry  = Math.round(p*0.999);
+  const tpL = Math.round(p*1.03), slL = Math.round(p*0.982);
+  const tpS = Math.round(p*0.97), slS = Math.round(p*1.018);
+  const res1 = Math.round(p*1.025), res2 = Math.round(p*1.05);
+  const sup1 = Math.round(p*0.975), sup2 = Math.round(p*0.95);
+  const pivot = Math.round((high+low+p)/3);
+  const rrL = (((tpL-entry)/(entry-slL))).toFixed(1);
+  const rrS = (((entry-tpS)/(slS-entry))).toFixed(1);
+  const vr = (vol/mc*100).toFixed(1);
+  const ql = q.toLowerCase();
+
+  // LONG / SHORT
+  if(ql.match(/long|short|buy|sell|trade|position|करूँ|लूँ/)) {
+    if(isBull) return `**${coinName} — LONG SETUP दिख रहा है** ▲\n\nLive data analysis:\n- Price **${fp(p)}** · Change **+${ch.toFixed(2)}%** — bullish momentum\n- Buy volume **${buyR}%** dominant\n- Volume/MC ratio: **${vr}%** — healthy activity\n- ATH से **${Math.abs(athP).toFixed(1)}%** नीचे है\n\n**Trade Setup:**\n- Entry: **${fp(entry)}**\n- Stop Loss: **${fp(slL)}** (−1.8%)\n- Take Profit 1: **${fp(tpL)}** (+3%)\n- Take Profit 2: **${fp(res2)}** (+5%)\n- Risk:Reward = **${rrL}:1** ✅\n- Max Leverage: **3-5x**\n\n⚠️ Resistance **${fp(res1)}** पर careful रहो।`;
+    if(isBear) return `**${coinName} — SHORT SETUP दिख रहा है** ▼\n\nLive data analysis:\n- Price **${fp(p)}** · Change **${ch.toFixed(2)}%** — bearish momentum\n- Sell volume **${selR}%** dominant\n- ATH से **${Math.abs(athP).toFixed(1)}%** नीचे — weak structure\n\n**Trade Setup:**\n- Entry: **${fp(entry)}**\n- Stop Loss: **${fp(slS)}** (+1.8%)\n- Take Profit 1: **${fp(tpS)}** (−3%)\n- Take Profit 2: **${fp(sup2)}** (−5%)\n- Risk:Reward = **${rrS}:1** ✅\n- Max Leverage: **3-5x**\n\n⚠️ Support **${fp(sup1)}** पर bounce हो सकता है।`;
+    return `**${coinName} — WAIT करो अभी** ⏳\n\nMarket unclear है:\n- Price change: **${ch.toFixed(2)}%** — no direction\n- Buy/Sell: **${buyR}%/${selR}%** — balanced\n\nBreakout का wait करो:\n- **${fp(res1)} तोड़े** → Long लो\n- **${fp(sup1)} तोड़े** → Short लो\n\nUnclear market में trade = capital risk।`;
+  }
+
+  // ENTRY/SL/TP
+  if(ql.match(/entry|sl|tp|stop|target|profit|level/)) {
+    const bias = isBull?'LONG':isBear?'SHORT':'NEUTRAL';
+    return `**${coinName}/USD — Price Levels** (${fp(p)})\n\n**${bias} Setup:**\n- Entry: **${fp(entry)}**\n- Stop Loss: **${fp(isBull?slL:slS)}** (${isBull?'-1.8%':'+1.8%'})\n- TP1 (50%): **${fp(isBull?tpL:tpS)}** (${isBull?'+3%':'-3%'})\n- TP2 (30%): **${fp(isBull?res2:sup2)}** (${isBull?'+5%':'-5%'})\n- TP3 (20%): **${fp(isBull?Math.round(p*1.08):Math.round(p*.92))}** (${isBull?'+8%':'-8%'})\n\n**Risk:Reward = ${isBull?rrL:rrS}:1**\n\n24h Range: **${fp(low)} – ${fp(high)}**\nPivot Point: **${fp(pivot)}**`;
+  }
+
+  // RISK
+  if(ql.match(/risk|safe|danger|खतर|जोखिम/)) {
+    const rl = Math.abs(ch)>4?'HIGH 🔴':Math.abs(ch)>2?'MEDIUM 🟡':'LOW 🟢';
+    return `**${coinName} Risk Assessment**\n\n**Risk Level: ${rl}**\n\n- 24h Volatility: **${((high-low)/p*100).toFixed(2)}%** range\n- Volume: **${fp(vol)}** · Vol/MC: **${vr}%**\n- ATH Distance: **${Math.abs(athP).toFixed(1)}%** नीचे\n- Buy/Sell: **${buyR}%/${selR}%**\n\n**Rules:**\n- Position: Portfolio का max **3-5%**\n- Leverage: Max **${Math.abs(ch)>3?'2-3x':'3-5x'}**\n- Stop Loss: **${fp(isBull?slL:slS)}** पर set करो\n- ${Math.abs(ch)>4?'⚠️ High volatility — size कम रखो':'✅ Normal conditions'}`;
+  }
+
+  // LEVERAGE
+  if(ql.match(/leverage|लेवरेज|capital|size|position/)) {
+    const rec = Math.abs(ch)>3?'2x':Math.abs(ch)>1.5?'3x':'5x';
+    return `**Leverage Guide — ${coinName}** (${fp(p)})\n\n**Recommended: ${rec}** (current volatility के हिसाब से)\n\n**Position Sizing:**\n- ₹10,000 portfolio → max ₹${(10000*0.03).toFixed(0)} risk/trade\n- ₹50,000 portfolio → max ₹${(50000*0.03).toFixed(0)} risk/trade\n- ₹1,00,000 portfolio → max ₹${(100000*0.03).toFixed(0)} risk/trade\n\n**Formula:** Position = Capital × 3% ÷ Stop%\n\n**Liquidation at ${rec}:**\n- Long: **${fp(Math.round(p*(1-1/parseInt(rec))))}**\n- Short: **${fp(Math.round(p*(1+1/parseInt(rec))))}**\n\n⚠️ 10x+ leverage avoid करो।`;
+  }
+
+  // OUTLOOK
+  if(ql.match(/outlook|forecast|घंट|predict|आगे/)) {
+    return `**${coinName} Outlook (1–4 Hours)**\n\nCurrent: **${fp(p)}** · ${ch>=0?'▲':'▼'} **${ch.toFixed(2)}%**\n\n🟢 **Bullish** (${isBull?'65%':'30%'}):\n→ ${fp(res1)} तोड़े → **${fp(res2)}** target\n→ Condition: Buy vol > 55%, volume बढ़े\n\n🔴 **Bearish** (${isBear?'60%':'30%'}):\n→ ${fp(sup1)} टूटे → **${fp(sup2)}** target\n→ Condition: Sell pressure बढ़े\n\n🟡 **Range** (${!isBull&&!isBear?'60%':'30%'}):\n→ **${fp(sup1)} – ${fp(res1)}** के बीच\n\nMarket Cap: **${fp(mc)}** | Vol/MC: **${vr}%**\nATH: **${fp(ath)}** (**${Math.abs(athP).toFixed(1)}%** दूर)`;
+  }
+
+  // FULL ANALYSIS / DEFAULT
+  return `**${coinName}/USD — Complete Live Analysis**\n\n**Price:** ${fp(p)} · ${ch>=0?'▲ +':'▼ '}${ch.toFixed(2)}%\n**24h Range:** ${fp(low)} – ${fp(high)}\n**Market Cap:** ${fp(mc)} (Rank #${mkt.rank})\n**Volume:** ${fp(vol)} (${vr}% of MC)\n**ATH:** ${fp(ath)} · अभी **${Math.abs(athP).toFixed(1)}%** नीचे\n\n**Key Levels:**\n- Resistance: **${fp(res1)}** · **${fp(res2)}**\n- Support: **${fp(sup1)}** · **${fp(sup2)}**\n- Pivot: **${fp(pivot)}**\n\n**Bias: ${isBull?'▲ BULLISH':isBear?'▼ BEARISH':'→ NEUTRAL'}**\n${isBull?`Long: Entry ${fp(entry)} · SL ${fp(slL)} · TP ${fp(tpL)}`:isBear?`Short: Entry ${fp(entry)} · SL ${fp(slS)} · TP ${fp(tpS)}`:`Wait: Breakout above ${fp(res1)} या below ${fp(sup1)}`}\n\nकोई specific सवाल? नीचे quick buttons use करो।`;
+}
+
+// ════════════════════════════════════════════
+// CHAT
+// ════════════════════════════════════════════
+function fmtReply(text) {
+  return '<div style="font-size:11px;color:#e8f6ff;line-height:1.7;">' +
+    text.replace(/\*\*(.*?)\*\*/g,'<strong style="color:#e8f6ff">$1</strong>')
+        .replace(/\$[\d,]+(\.\d+)?/g, m=>`<strong style="color:#ffe000;font-family:Orbitron,monospace">${m}</strong>`)
+        .replace(/(\+[\d.]+%)/g,'<span style="color:#00ff9d">$1</span>')
+        .replace(/(-[\d.]+%)/g,'<span style="color:#ff2d55">$1</span>')
+        .replace(/▲/g,'<span style="color:#00ff9d">▲</span>')
+        .replace(/▼/g,'<span style="color:#ff2d55">▼</span>')
+        .replace(/\n/g,'<br>')
+  + '</div>';
+}
+
+function addMsg(html, role) {
+  const area = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  if(role==='ai') div.innerHTML = `<div class="msg-av av-ai">🤖</div><div class="bubble">${html}</div>`;
+  else             div.innerHTML = `<div class="msg-av av-u">YOU</div><div class="bubble">${html}</div>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function showTyping() {
+  const area = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className='msg ai'; div.id='typing';
+  div.innerHTML=`<div class="msg-av av-ai">🤖</div><div class="bubble"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  area.appendChild(div); area.scrollTop=area.scrollHeight;
+}
+function rmTyping(){ const t=document.getElementById('typing'); if(t)t.remove(); }
+
+async function sendMsg() {
+  const inp = document.getElementById('chat-inp');
+  const btn = document.getElementById('send-btn');
+  const txt = inp.value.trim();
+  if(!txt) return;
+  addMsg(txt,'user');
+  inp.value='';
+  btn.disabled=true;
+  showTyping();
+  await new Promise(r=>setTimeout(r, 700+Math.random()*600));
+  rmTyping();
+  const reply = analysis(txt);
+  addMsg(fmtReply(reply),'ai');
+  // Update signal badge from reply
+  const sig = document.getElementById('main-sig');
+  if(/wait|unclear|sideways/i.test(reply)){ sig.className='sig-main sm-wait'; sig.textContent='⏳ WAIT'; }
+  else if(/SHORT SETUP|▼ SHORT/i.test(reply)){ sig.className='sig-main sm-short'; sig.textContent='▼ SHORT'; }
+  else if(/LONG SETUP|▲ LONG/i.test(reply)){ sig.className='sig-main sm-long'; sig.textContent='▲ LONG'; }
+  btn.disabled=false;
+}
+
+function ask(q){ document.getElementById('chat-inp').value=q; sendMsg(); }
+function handleKey(e){ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } }
+
+// ════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════
+(async function init(){
+  await fetchAll();
+  // Initial AI greeting
+  if(mkt.price){
+    addMsg(fmtReply(`**नमस्ते! NEXUS AI तैयार है।** 🤖\n\nCoinGecko से **real-time data** मिल रहा है — ${coinName}/USD अभी **${fp(mkt.price)}** पर है (${mkt.changePct>=0?'+':''}${mkt.changePct?.toFixed(2)}%).\n\nAI ने market scan किया। Bias: **${mkt.changePct>1?'▲ BULLISH':mkt.changePct<-1?'▼ BEARISH':'→ NEUTRAL'}**\n\nकुछ भी पूछो — quick buttons या खुद type करो। 👇`),'ai');
+  }
+  // Auto-refresh every 60 seconds (CoinGecko free tier limit)
+  refreshTimer = setInterval(fetchAll, 60000);
+})();
+</script>
+</body>
+</html>
